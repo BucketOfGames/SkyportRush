@@ -7,7 +7,6 @@ import { InputManager3D } from './managers/InputManager3D';
 import { WeaponSystem } from './systems/WeaponSystem';
 import { NetworkManager } from './managers/NetworkManager';
 import { AudioManager3D } from './managers/AudioManager3D';
-import { CollisionSystem } from './physics/CollisionSystem';
 
 interface GameCallbacks {
   onGameEnd: () => void;
@@ -29,7 +28,6 @@ export class Game3D {
   private weaponSystem: WeaponSystem;
   private networkManager: NetworkManager;
   private audioManager: AudioManager3D;
-  private collisionSystem: CollisionSystem;
   
   private isRunning: boolean = false;
   private lastTime: number = 0;
@@ -69,7 +67,7 @@ export class Game3D {
       75,
       this.canvas.width / this.canvas.height,
       0.1,
-      2000 // Increased for large battlefield
+      2000
     );
 
     // Renderer with enhanced settings for realistic battlefield
@@ -80,16 +78,16 @@ export class Game3D {
     this.renderer.setSize(this.canvas.width, this.canvas.height);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.setClearColor(0x2a2a35); // Battlefield sky color
+    this.renderer.setClearColor(0x404050); // Brighter background
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 1.5; // Increased for better visibility
 
-    // Realistic battlefield lighting
-    const ambientLight = new THREE.AmbientLight(0x404050, 0.4);
+    // Enhanced lighting for better visibility
+    const ambientLight = new THREE.AmbientLight(0x606080, 0.8); // Increased intensity and brightness
     this.scene.add(ambientLight);
 
-    // Main directional light (sun through clouds)
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    // Main directional light (sun)
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5); // Increased intensity
     directionalLight.position.set(200, 300, 100);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 4096;
@@ -100,39 +98,53 @@ export class Game3D {
     directionalLight.shadow.camera.right = 200;
     directionalLight.shadow.camera.top = 200;
     directionalLight.shadow.camera.bottom = -200;
+    directionalLight.shadow.bias = -0.0001;
     this.scene.add(directionalLight);
 
+    // Additional fill light for better visibility
+    const fillLight = new THREE.DirectionalLight(0xaabbff, 0.6); // Brighter fill light
+    fillLight.position.set(-100, 200, -100);
+    this.scene.add(fillLight);
+
     // Battle fire lights (orange glow from explosions)
-    const fireLight1 = new THREE.PointLight(0xff4400, 1.5, 200);
+    const fireLight1 = new THREE.PointLight(0xff6600, 2.5, 350); // Increased intensity and range
     fireLight1.position.set(100, 20, 100);
     this.scene.add(fireLight1);
 
-    const fireLight2 = new THREE.PointLight(0xff6600, 1.2, 150);
+    const fireLight2 = new THREE.PointLight(0xff8800, 2.2, 300);
     fireLight2.position.set(-80, 15, -120);
     this.scene.add(fireLight2);
 
     // Distant explosion lights
-    const explosionLight = new THREE.PointLight(0xff8800, 2.0, 300);
+    const explosionLight = new THREE.PointLight(0xffaa00, 3.5, 450); // Brighter explosion light
     explosionLight.position.set(0, 50, -200);
     this.scene.add(explosionLight);
+
+    // Player area lighting for better visibility
+    const playerLight = new THREE.PointLight(0xaaccff, 1.5, 60); // Brighter player light
+    playerLight.position.set(0, 10, 0);
+    this.scene.add(playerLight);
+
+    // Additional overhead lighting
+    const overheadLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    overheadLight.position.set(0, 500, 0);
+    this.scene.add(overheadLight);
   }
 
   private initGame(): void {
-    // Initialize collision system first
-    this.collisionSystem = new CollisionSystem();
-    
-    // Add ground plane collider
-    this.collisionSystem.addCollider({
-      type: 'plane',
-      position: new THREE.Vector3(0, 0, 0),
-      normal: new THREE.Vector3(0, 1, 0),
-      isStatic: true,
-      id: 'ground'
-    });
-
-    this.player = new Player3D(this.scene, this.camera, this.collisionSystem);
     this.terrainGenerator = new AlienTerrainGenerator(this.scene);
+    
+    // Create terrain height function
+    const terrainHeightFunction = (x: number, z: number): number => {
+      return this.terrainGenerator.getHeightAtPosition(x, z);
+    };
+
+    this.player = new Player3D(this.scene, this.camera);
+    this.player.setTerrainHeightFunction(terrainHeightFunction);
+
     this.enemyManager = new AlienEnemyManager(this.scene);
+    this.enemyManager.setTerrainHeightFunction(terrainHeightFunction);
+
     this.inputManager = new InputManager3D(this.canvas);
     this.weaponSystem = new WeaponSystem(this.scene);
     this.networkManager = new NetworkManager();
@@ -145,40 +157,10 @@ export class Game3D {
       }
     }
 
-    // Add terrain structures to collision system
-    this.addTerrainColliders();
-
     // Start the battle!
     this.enemyManager.spawnWave(0);
 
     this.bindEvents();
-  }
-
-  private addTerrainColliders(): void {
-    // Add colliders for terrain structures
-    const structures = this.terrainGenerator.getAlienStructures();
-    structures.forEach((structure, index) => {
-      // Add box colliders for structures
-      this.collisionSystem.addCollider({
-        type: 'box',
-        position: structure.position.clone(),
-        size: new THREE.Vector3(8, 6, 8), // Approximate structure size
-        isStatic: true,
-        id: `structure_${index}`
-      });
-    });
-
-    // Add colliders for enemy bases
-    const enemyBases = this.terrainGenerator.getEnemyBases();
-    enemyBases.forEach((base, index) => {
-      this.collisionSystem.addCollider({
-        type: 'sphere',
-        position: base.position.clone(),
-        radius: 15,
-        isStatic: true,
-        id: `enemy_base_${index}`
-      });
-    });
   }
 
   private bindEvents(): void {
@@ -286,7 +268,7 @@ export class Game3D {
     enemies.forEach(enemy => {
       const distance = playerPos.distanceTo(enemy.position);
       if (distance < 2) {
-        this.playerStats.health -= 3; // Reduced damage for better gameplay
+        this.playerStats.health -= 3;
         this.audioManager.playPlayerHit();
         if (this.playerStats.health <= 0) {
           this.callbacks.onGameEnd();
@@ -311,7 +293,7 @@ export class Game3D {
           // Check if enemy was destroyed
           if (this.enemyManager.isEnemyDestroyed(enemy.userData.id)) {
             this.playerStats.kills++;
-            this.playerStats.score += 200; // Bonus for kill
+            this.playerStats.score += 200;
           }
         }
       });
@@ -329,16 +311,9 @@ export class Game3D {
       for (let z = chunkZ - 2; z <= chunkZ + 2; z++) {
         if (!this.terrainGenerator.hasChunk(x, z)) {
           this.terrainGenerator.generateChunk(x, z);
-          // Add new structure colliders
-          this.addNewChunkColliders(x, z);
         }
       }
     }
-  }
-
-  private addNewChunkColliders(chunkX: number, chunkZ: number): void {
-    // This would add colliders for newly generated structures
-    // For now, we'll keep it simple since structures are added at initialization
   }
 
   private updateGameStats(): void {

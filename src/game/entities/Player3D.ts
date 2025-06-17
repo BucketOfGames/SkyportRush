@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { InputManager3D } from '../managers/InputManager3D';
-import { CollisionSystem } from '../physics/CollisionSystem';
 
 export class Player3D {
   private scene: THREE.Scene;
@@ -11,34 +10,36 @@ export class Player3D {
   private moveSpeed: number = 12;
   private jumpSpeed: number = 8;
   private mouseSensitivity: number = 0.002;
-  private collisionSystem: CollisionSystem;
   
   // Camera control variables - modern third-person shooter style
   private cameraDistance: number = 5;
   private cameraHeight: number = 1.5;
-  private shoulderOffset: number = 1.2; // Right shoulder offset
-  private yaw: number = 0; // Horizontal rotation (left/right)
-  private pitch: number = 0.2; // Vertical rotation (up/down) - slightly looking down
-  private maxPitch: number = Math.PI / 3; // 60 degrees up
-  private minPitch: number = -Math.PI / 4; // 45 degrees down
+  private shoulderOffset: number = 1.2;
+  private yaw: number = 0;
+  private pitch: number = 0.2;
+  private maxPitch: number = Math.PI / 3;
+  private minPitch: number = -Math.PI / 4;
   
   // Smooth camera following
   private cameraLerpSpeed: number = 10;
   private rotationLerpSpeed: number = 8;
 
-  // Physics properties
-  private gravity: number = 25;
-  private playerRadius: number = 0.5;
-  private groundCheckDistance: number = 0.1;
+  // Terrain collision
+  private raycaster: THREE.Raycaster;
+  private terrainHeightFunction: ((x: number, z: number) => number) | null = null;
 
-  constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, collisionSystem: CollisionSystem) {
+  constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera) {
     this.scene = scene;
     this.camera = camera;
     this.velocity = new THREE.Vector3();
-    this.collisionSystem = collisionSystem;
+    this.raycaster = new THREE.Raycaster();
     
     this.createPlayerMesh();
     this.setupCamera();
+  }
+
+  public setTerrainHeightFunction(heightFunction: (x: number, z: number) => number): void {
+    this.terrainHeightFunction = heightFunction;
   }
 
   private createPlayerMesh(): void {
@@ -46,7 +47,7 @@ export class Player3D {
     const geometry = new THREE.CapsuleGeometry(0.5, 1.8, 4, 8);
     const material = new THREE.MeshPhongMaterial({ 
       color: 0x00ffff,
-      emissive: 0x002244,
+      emissive: 0x004466,
       shininess: 100
     });
     
@@ -60,7 +61,7 @@ export class Player3D {
     const detailMaterial = new THREE.MeshBasicMaterial({ 
       color: 0x00ffff,
       transparent: true,
-      opacity: 0.8
+      opacity: 0.9
     });
     
     const detail = new THREE.Mesh(detailGeometry, detailMaterial);
@@ -69,7 +70,7 @@ export class Player3D {
 
     // Add weapon attachment
     const weaponGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.8);
-    const weaponMaterial = new THREE.MeshPhongMaterial({ color: 0x444444 });
+    const weaponMaterial = new THREE.MeshPhongMaterial({ color: 0x666666 });
     const weapon = new THREE.Mesh(weaponGeometry, weaponMaterial);
     weapon.position.set(0.3, 0.2, 0.5);
     this.playerMesh.add(weapon);
@@ -80,7 +81,7 @@ export class Player3D {
   }
 
   private updateCameraPosition(): void {
-    const deltaTime = 0.016; // Assuming 60fps for smooth interpolation
+    const deltaTime = 0.016;
     
     // Get player position
     const playerPos = this.playerMesh.position.clone();
@@ -99,12 +100,19 @@ export class Player3D {
     const rightVector = new THREE.Vector3(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
     idealCameraPos.add(rightVector.multiplyScalar(this.shoulderOffset));
     
+    // Prevent camera from going below terrain
+    const terrainHeightAtCamera = this.getTerrainHeightAtPosition(idealCameraPos.x, idealCameraPos.z);
+    const minCameraHeight = terrainHeightAtCamera + 2; // Keep camera at least 2 units above ground
+    if (idealCameraPos.y < minCameraHeight) {
+      idealCameraPos.y = minCameraHeight;
+    }
+    
     // Smooth camera movement using lerp
     this.camera.position.lerp(idealCameraPos, this.cameraLerpSpeed * deltaTime);
     
     // Calculate look-at target (where camera should look)
     const lookTarget = new THREE.Vector3();
-    const lookDistance = 10; // How far ahead to look
+    const lookDistance = 10;
     
     // Look in the direction of yaw and pitch
     lookTarget.x = playerPos.x - Math.sin(this.yaw) * lookDistance;
@@ -118,7 +126,7 @@ export class Player3D {
   public update(deltaTime: number, inputManager: InputManager3D): void {
     this.handleMouseLook(inputManager);
     this.handleMovement(deltaTime, inputManager);
-    this.applyPhysics(deltaTime);
+    this.applyGravityAndTerrainCollision(deltaTime);
     this.updateCameraPosition();
   }
 
@@ -134,7 +142,7 @@ export class Player3D {
     if (moveVector.length() > 0) {
       moveVector.normalize();
       
-      // Calculate movement relative to camera yaw (not pitch - we don't want to move up/down)
+      // Calculate movement relative to camera yaw
       const cameraYawOnly = this.yaw;
       
       // Forward/backward relative to camera direction
@@ -155,11 +163,11 @@ export class Player3D {
       const movement = new THREE.Vector3();
       movement.addScaledVector(forward, moveVector.z);
       movement.addScaledVector(right, moveVector.x);
-      movement.multiplyScalar(this.moveSpeed);
+      movement.multiplyScalar(this.moveSpeed * deltaTime);
       
-      // Apply horizontal movement to velocity
-      this.velocity.x = movement.x;
-      this.velocity.z = movement.z;
+      // Apply movement with smooth interpolation
+      const newPosition = this.playerMesh.position.clone().add(movement);
+      this.playerMesh.position.lerp(newPosition, 0.9);
       
       // Rotate player to face movement direction (smooth rotation)
       if (movement.length() > 0) {
@@ -170,10 +178,6 @@ export class Player3D {
           deltaTime * this.rotationLerpSpeed
         );
       }
-    } else {
-      // Apply friction when not moving
-      this.velocity.x *= 0.8;
-      this.velocity.z *= 0.8;
     }
     
     // Jump
@@ -187,10 +191,10 @@ export class Player3D {
     const mouseDelta = inputManager.getMouseDelta();
     
     if (mouseDelta.x !== 0 || mouseDelta.y !== 0) {
-      // Update yaw (horizontal rotation) - left/right mouse movement
+      // Update yaw (horizontal rotation)
       this.yaw -= mouseDelta.x * this.mouseSensitivity;
       
-      // Update pitch (vertical rotation) - up/down mouse movement
+      // Update pitch (vertical rotation)
       this.pitch += mouseDelta.y * this.mouseSensitivity;
       
       // Clamp pitch to prevent camera flipping
@@ -209,61 +213,54 @@ export class Player3D {
     return from + diff * t;
   }
 
-  private applyPhysics(deltaTime: number): void {
-    // Store old position for collision resolution
-    const oldPosition = this.playerMesh.position.clone();
-    
-    // Apply gravity
-    if (!this.isGrounded) {
-      this.velocity.y -= this.gravity * deltaTime;
-    }
-    
-    // Apply velocity to position
-    const deltaPosition = this.velocity.clone().multiplyScalar(deltaTime);
-    this.playerMesh.position.add(deltaPosition);
-    
-    // Check for collisions
-    this.handleCollisions(oldPosition);
-    
-    // Ground check
-    this.checkGrounded();
-  }
-
-  private handleCollisions(oldPosition: THREE.Vector3): void {
-    const collision = this.collisionSystem.checkCollision(this.playerMesh.position, this.playerRadius);
-    
-    if (collision) {
-      // Resolve collision
-      this.collisionSystem.resolveCollision(this.playerMesh.position, this.velocity, collision);
-      
-      // If collision is with ground (normal pointing up), set grounded
-      if (collision.normal.y > 0.7) {
-        this.isGrounded = true;
-        this.velocity.y = 0;
-      }
-    }
-  }
-
-  private checkGrounded(): void {
-    // Cast a ray downward to check if we're on the ground
-    const groundHeight = this.collisionSystem.getHeightAtPosition(
+  private applyGravityAndTerrainCollision(deltaTime: number): void {
+    // Get terrain height at player position
+    const terrainHeight = this.getTerrainHeightAtPosition(
       this.playerMesh.position.x, 
       this.playerMesh.position.z
     );
-    
-    const playerBottom = this.playerMesh.position.y - this.playerRadius;
-    const distanceToGround = playerBottom - groundHeight;
-    
-    if (distanceToGround <= this.groundCheckDistance) {
+
+    // Player capsule: radius = 0.5, height = 1.8
+    // Bottom of capsule is at position.y - (height/2 + radius) = position.y - 1.4
+    const playerBottomY = terrainHeight + 1.4; // Proper height offset for capsule
+
+    if (this.playerMesh.position.y <= playerBottomY) {
+      // Player is on or below ground
+      this.playerMesh.position.y = playerBottomY;
+      this.velocity.y = 0;
       this.isGrounded = true;
-      this.playerMesh.position.y = groundHeight + this.playerRadius;
-      
-      if (this.velocity.y < 0) {
-        this.velocity.y = 0;
-      }
-    } else if (distanceToGround > this.groundCheckDistance * 2) {
+    } else {
+      // Player is in the air - apply gravity
       this.isGrounded = false;
+      this.velocity.y -= 25 * deltaTime; // Gravity
+      this.playerMesh.position.y += this.velocity.y * deltaTime;
     }
+  }
+
+  private getTerrainHeightAtPosition(x: number, z: number): number {
+    if (this.terrainHeightFunction) {
+      return this.terrainHeightFunction(x, z);
+    }
+    
+    // Fallback: use raycasting to find terrain height
+    this.raycaster.set(
+      new THREE.Vector3(x, 1000, z), // Start high above
+      new THREE.Vector3(0, -1, 0)    // Point downward
+    );
+
+    const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+    
+    for (const intersect of intersects) {
+      // Check if this is terrain (not player, enemies, etc.)
+      if (intersect.object.material && 
+          intersect.object !== this.playerMesh &&
+          !intersect.object.userData.isEnemy &&
+          !intersect.object.userData.isProjectile) {
+        return intersect.point.y;
+      }
+    }
+    
+    return 0; // Default ground level
   }
 
   public getPosition(): THREE.Vector3 {

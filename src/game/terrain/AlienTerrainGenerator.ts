@@ -42,10 +42,10 @@ export class AlienTerrainGenerator {
     const groundMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
-        grassColor: { value: new THREE.Color(0x4a5a3a) },
-        dirtColor: { value: new THREE.Color(0x6a5a4a) },
-        rockColor: { value: new THREE.Color(0x6a6a6a) },
-        snowColor: { value: new THREE.Color(0x9a9a9a) }
+        grassColor: { value: new THREE.Color(0x6a7a5a) }, // Brighter grass
+        dirtColor: { value: new THREE.Color(0x8a7a6a) }, // Brighter dirt
+        rockColor: { value: new THREE.Color(0x8a8a8a) }, // Brighter rock
+        snowColor: { value: new THREE.Color(0xbababa) } // Brighter snow
       },
       vertexShader: `
         varying vec3 vPosition;
@@ -84,35 +84,35 @@ export class AlienTerrainGenerator {
           // Calculate slope
           float slope = 1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0)));
           
-          // Base terrain color
-          vec3 finalColor = grassColor;
+          // Base terrain color - much brighter for better visibility
+          vec3 finalColor = grassColor * 1.6; // Significantly increased brightness
           
           // Add dirt on moderate slopes
-          finalColor = mix(finalColor, dirtColor, smoothstep(0.2, 0.5, slope));
+          finalColor = mix(finalColor, dirtColor * 1.5, smoothstep(0.2, 0.5, slope));
           
           // Add rock on steep slopes
-          finalColor = mix(finalColor, rockColor, smoothstep(0.4, 0.8, slope));
+          finalColor = mix(finalColor, rockColor * 1.4, smoothstep(0.4, 0.8, slope));
           
           // Add snow/dust on high areas
           finalColor = mix(finalColor, snowColor, smoothstep(15.0, 25.0, vHeight));
           
           // Add battle damage and variation
           float damage = noise(vWorldPosition.xy * 0.05);
-          finalColor *= (0.7 + damage * 0.3);
+          finalColor *= (0.9 + damage * 0.2); // Higher base brightness
           
           // Add some color variation
           float variation = noise(vWorldPosition.xy * 0.02);
-          finalColor += vec3(variation * 0.1);
+          finalColor += vec3(variation * 0.15);
           
-          // Basic lighting calculation
+          // Enhanced lighting calculation
           vec3 lightDir = normalize(vec3(0.5, 0.8, 1.0));
-          float lighting = max(0.3, dot(vNormal, lightDir));
+          float lighting = max(0.7, dot(vNormal, lightDir)); // Much higher minimum lighting
           finalColor *= lighting;
           
-          // Add slight atmospheric perspective
+          // Minimal atmospheric perspective for better visibility
           float distance = length(vWorldPosition.xy);
-          float fog = 1.0 - smoothstep(500.0, 1000.0, distance);
-          finalColor = mix(vec3(0.4, 0.4, 0.5), finalColor, fog);
+          float fog = 1.0 - smoothstep(1000.0, 1800.0, distance); // Reduced fog effect
+          finalColor = mix(vec3(0.7, 0.7, 0.8), finalColor, fog);
           
           gl_FragColor = vec4(finalColor, 1.0);
         }
@@ -147,7 +147,7 @@ export class AlienTerrainGenerator {
         case 0: // Small rock
           const rockGeometry = new THREE.DodecahedronGeometry(0.5 + Math.random() * 1);
           const rockMaterial = new THREE.MeshPhongMaterial({
-            color: 0x5a5a5a,
+            color: 0x9a9a9a, // Brighter for better visibility
             roughness: 0.8
           });
           detail = new THREE.Mesh(rockGeometry, rockMaterial);
@@ -160,7 +160,7 @@ export class AlienTerrainGenerator {
             0.5 + Math.random() * 1
           );
           const debrisMaterial = new THREE.MeshPhongMaterial({
-            color: 0x3a3a3a
+            color: 0x7a7a7a // Brighter for better visibility
           });
           detail = new THREE.Mesh(debrisGeometry, debrisMaterial);
           break;
@@ -168,7 +168,7 @@ export class AlienTerrainGenerator {
         case 2: // Metal fragment
           const metalGeometry = new THREE.CylinderGeometry(0.2, 0.3, 0.8, 6);
           const metalMaterial = new THREE.MeshPhongMaterial({
-            color: 0x4a4a4a,
+            color: 0x8a8a8a, // Brighter for better visibility
             metalness: 0.8,
             roughness: 0.3
           });
@@ -178,9 +178,9 @@ export class AlienTerrainGenerator {
         case 3: // Crystal shard
           const crystalGeometry = new THREE.ConeGeometry(0.3, 1.5, 6);
           const crystalMaterial = new THREE.MeshPhongMaterial({
-            color: 0x4488aa,
+            color: 0x88bbee, // Brighter for better visibility
             transparent: true,
-            opacity: 0.7
+            opacity: 0.9
           });
           detail = new THREE.Mesh(crystalGeometry, crystalMaterial);
           break;
@@ -218,7 +218,7 @@ export class AlienTerrainGenerator {
     const skyMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
-        cloudCoverage: { value: 0.6 }
+        cloudCoverage: { value: 0.3 } // Reduced cloud coverage for better visibility
       },
       vertexShader: `
         varying vec3 vWorldPosition;
@@ -241,11 +241,11 @@ export class AlienTerrainGenerator {
         void main() {
           vec3 direction = normalize(vWorldPosition);
           
-          // Base sky color - stormy battlefield atmosphere
+          // Much brighter sky color for better visibility
           float y = direction.y;
           vec3 skyColor = mix(
-            vec3(0.2, 0.15, 0.1), // Dark orange horizon (fires)
-            vec3(0.3, 0.35, 0.4),  // Stormy gray sky
+            vec3(0.5, 0.4, 0.3), // Brighter orange horizon
+            vec3(0.6, 0.65, 0.7),  // Much brighter stormy gray sky
             smoothstep(-0.1, 0.6, y)
           );
           
@@ -255,14 +255,14 @@ export class AlienTerrainGenerator {
           cloudNoise += noise(direction * 320.0 + time * 0.02) * 0.25;
           
           float clouds = smoothstep(0.0, 1.0, cloudNoise * cloudCoverage);
-          vec3 cloudColor = vec3(0.5, 0.5, 0.55);
+          vec3 cloudColor = vec3(0.8, 0.8, 0.85); // Much brighter clouds
           
-          skyColor = mix(skyColor, cloudColor, clouds * 0.8);
+          skyColor = mix(skyColor, cloudColor, clouds * 0.5); // Reduced cloud opacity
           
           // Add orange glow on horizon (battle fires)
           if (y < 0.2) {
             float fireGlow = (0.2 - y) * 5.0;
-            skyColor += vec3(0.4, 0.2, 0.05) * fireGlow * 0.5;
+            skyColor += vec3(0.7, 0.5, 0.2) * fireGlow * 0.5; // Brighter fire glow
           }
           
           gl_FragColor = vec4(skyColor, 1.0);
@@ -276,17 +276,17 @@ export class AlienTerrainGenerator {
   }
 
   private createBattlefieldAtmosphere(): void {
-    // Realistic battlefield fog
-    this.scene.fog = new THREE.Fog(0x505060, 100, 1200);
+    // Much lighter battlefield fog for better visibility
+    this.scene.fog = new THREE.Fog(0x808090, 300, 1800); // Lighter fog, starts much further away
 
     // Add smoke/dust particles
     this.createBattlefieldParticles();
   }
 
   private createBattlefieldParticles(): void {
-    // Smoke and dust particles
+    // Significantly reduced smoke and dust particles for better visibility
     const particleGeometry = new THREE.BufferGeometry();
-    const particleCount = 300;
+    const particleCount = 100; // Further reduced count
     const positions = new Float32Array(particleCount * 3);
     const colors = new Float32Array(particleCount * 3);
 
@@ -295,8 +295,8 @@ export class AlienTerrainGenerator {
       positions[i * 3 + 1] = Math.random() * 150 + 10;
       positions[i * 3 + 2] = (Math.random() - 0.5) * 1500;
 
-      // Smoke colors - mix of gray and slight orange
-      const gray = 0.3 + Math.random() * 0.3;
+      // Much lighter smoke colors
+      const gray = 0.6 + Math.random() * 0.3; // Much lighter base
       const orange = Math.random() * 0.1;
       colors[i * 3] = gray + orange;
       colors[i * 3 + 1] = gray + orange * 0.5;
@@ -307,9 +307,9 @@ export class AlienTerrainGenerator {
     particleGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const particleMaterial = new THREE.PointsMaterial({
-      size: 12,
+      size: 6, // Smaller particles
       transparent: true,
-      opacity: 0.4,
+      opacity: 0.15, // Much more transparent
       vertexColors: true,
       blending: THREE.AdditiveBlending
     });
@@ -319,11 +319,11 @@ export class AlienTerrainGenerator {
   }
 
   private createDistantMountains(): void {
-    // Create mountain ranges in the distance
+    // Create mountain ranges in the distance with much better visibility
     const mountainRanges = [
-      { distance: 1200, height: 200, color: 0x1a1a25, opacity: 0.4 },
-      { distance: 900, height: 150, color: 0x252530, opacity: 0.6 },
-      { distance: 600, height: 120, color: 0x303035, opacity: 0.8 }
+      { distance: 1200, height: 200, color: 0x5a5a65, opacity: 0.6 }, // Much brighter
+      { distance: 900, height: 150, color: 0x656570, opacity: 0.8 },  // Much brighter
+      { distance: 600, height: 120, color: 0x707075, opacity: 1.0 }   // Much brighter
     ];
 
     mountainRanges.forEach((range, index) => {
@@ -423,9 +423,9 @@ export class AlienTerrainGenerator {
     // Crater rim
     const rimGeometry = new THREE.RingGeometry(8, 12, 16);
     const rimMaterial = new THREE.MeshPhongMaterial({
-      color: 0x2a2a2a,
+      color: 0x6a6a6a, // Brighter for better visibility
       transparent: true,
-      opacity: 0.8
+      opacity: 0.9
     });
     
     const rim = new THREE.Mesh(rimGeometry, rimMaterial);
@@ -436,7 +436,7 @@ export class AlienTerrainGenerator {
     // Crater center (darker)
     const centerGeometry = new THREE.CircleGeometry(8, 16);
     const centerMaterial = new THREE.MeshPhongMaterial({
-      color: 0x1a1a1a
+      color: 0x5a5a5a // Brighter for better visibility
     });
     
     const center = new THREE.Mesh(centerGeometry, centerMaterial);
@@ -452,7 +452,7 @@ export class AlienTerrainGenerator {
         0.5 + Math.random()
       );
       const debrisMaterial = new THREE.MeshPhongMaterial({
-        color: 0x3a3a3a
+        color: 0x7a7a7a // Brighter for better visibility
       });
       
       const debris = new THREE.Mesh(debrisGeometry, debrisMaterial);
@@ -486,7 +486,7 @@ export class AlienTerrainGenerator {
         2 + Math.random() * 3
       );
       const ruinMaterial = new THREE.MeshPhongMaterial({
-        color: 0x4a4a4a
+        color: 0x8a8a8a // Brighter for better visibility
       });
       
       const ruin = new THREE.Mesh(ruinGeometry, ruinMaterial);
@@ -512,8 +512,8 @@ export class AlienTerrainGenerator {
     // Main bunker structure
     const bunkerGeometry = new THREE.BoxGeometry(8, 3, 8);
     const bunkerMaterial = new THREE.MeshPhongMaterial({
-      color: 0x3a3a3a,
-      emissive: 0x0a0a0a
+      color: 0x7a7a7a, // Brighter for better visibility
+      emissive: 0x2a2a2a
     });
     
     const bunker = new THREE.Mesh(bunkerGeometry, bunkerMaterial);
@@ -525,7 +525,7 @@ export class AlienTerrainGenerator {
     // Entrance
     const entranceGeometry = new THREE.BoxGeometry(2, 2.5, 1);
     const entranceMaterial = new THREE.MeshPhongMaterial({
-      color: 0x1a1a1a
+      color: 0x4a4a4a // Brighter for better visibility
     });
     
     const entrance = new THREE.Mesh(entranceGeometry, entranceMaterial);
@@ -535,8 +535,8 @@ export class AlienTerrainGenerator {
     // Defensive turret
     const turretGeometry = new THREE.CylinderGeometry(0.5, 0.8, 1.5, 8);
     const turretMaterial = new THREE.MeshPhongMaterial({
-      color: 0x5a5a5a,
-      emissive: 0x220000
+      color: 0x9a9a9a, // Brighter for better visibility
+      emissive: 0x440000
     });
     
     const turret = new THREE.Mesh(turretGeometry, turretMaterial);
@@ -555,8 +555,8 @@ export class AlienTerrainGenerator {
     for (let i = 0; i < 4; i++) {
       const crateGeometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
       const crateMaterial = new THREE.MeshPhongMaterial({
-        color: 0x4a6a4a,
-        emissive: 0x001100
+        color: 0x8aaa8a, // Brighter for better visibility
+        emissive: 0x004400
       });
       
       const crate = new THREE.Mesh(crateGeometry, crateMaterial);
@@ -582,7 +582,7 @@ export class AlienTerrainGenerator {
     for (let i = 0; i < 5; i++) {
       const wallGeometry = new THREE.BoxGeometry(3, 4, 0.5);
       const wallMaterial = new THREE.MeshPhongMaterial({
-        color: 0x5a5a5a
+        color: 0x9a9a9a // Brighter for better visibility
       });
       
       const wall = new THREE.Mesh(wallGeometry, wallMaterial);
@@ -603,8 +603,8 @@ export class AlienTerrainGenerator {
     // Main base structure
     const baseGeometry = new THREE.CylinderGeometry(12, 15, 8, 8);
     const baseMaterial = new THREE.MeshPhongMaterial({
-      color: 0x2a2a3a,
-      emissive: 0x110022
+      color: 0x6a6a7a, // Brighter for better visibility
+      emissive: 0x440066
     });
     
     const base = new THREE.Mesh(baseGeometry, baseMaterial);
@@ -616,9 +616,9 @@ export class AlienTerrainGenerator {
     // Energy shield dome
     const shieldGeometry = new THREE.SphereGeometry(18, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
     const shieldMaterial = new THREE.MeshBasicMaterial({
-      color: 0x4488ff,
+      color: 0x88bbff, // Much brighter for better visibility
       transparent: true,
-      opacity: 0.2,
+      opacity: 0.4,
       side: THREE.DoubleSide
     });
     
@@ -630,8 +630,8 @@ export class AlienTerrainGenerator {
     for (let i = 0; i < 4; i++) {
       const towerGeometry = new THREE.CylinderGeometry(0.3, 0.5, 12, 6);
       const towerMaterial = new THREE.MeshPhongMaterial({
-        color: 0x4a4a4a,
-        emissive: 0x002200
+        color: 0x8a8a8a, // Brighter for better visibility
+        emissive: 0x006600
       });
       
       const tower = new THREE.Mesh(towerGeometry, towerMaterial);
@@ -656,8 +656,8 @@ export class AlienTerrainGenerator {
     // Ship hull
     const hullGeometry = new THREE.CylinderGeometry(3, 4, 20, 8);
     const hullMaterial = new THREE.MeshPhongMaterial({
-      color: 0x3a3a3a,
-      emissive: 0x220000
+      color: 0x7a7a7a, // Brighter for better visibility
+      emissive: 0x550000
     });
     
     const hull = new THREE.Mesh(hullGeometry, hullMaterial);
@@ -670,9 +670,9 @@ export class AlienTerrainGenerator {
     // Smoke effect
     const smokeGeometry = new THREE.SphereGeometry(2, 8, 8);
     const smokeMaterial = new THREE.MeshBasicMaterial({
-      color: 0x2a2a2a,
+      color: 0x6a6a6a, // Brighter for better visibility
       transparent: true,
-      opacity: 0.3
+      opacity: 0.15 // Much more transparent
     });
     
     const smoke = new THREE.Mesh(smokeGeometry, smokeMaterial);
@@ -690,7 +690,7 @@ export class AlienTerrainGenerator {
     for (let i = 0; i < 5; i++) {
       const rockGeometry = new THREE.DodecahedronGeometry(1 + Math.random() * 2);
       const rockMaterial = new THREE.MeshPhongMaterial({
-        color: 0x5a5a5a
+        color: 0x9a9a9a // Brighter for better visibility
       });
       
       const rock = new THREE.Mesh(rockGeometry, rockMaterial);
@@ -746,7 +746,7 @@ export class AlienTerrainGenerator {
       // Animate shield
       const shield = base.children.find(child => child.material && child.material.transparent);
       if (shield) {
-        shield.material.opacity = 0.1 + Math.sin(time * 2 + index) * 0.1;
+        shield.material.opacity = 0.3 + Math.sin(time * 2 + index) * 0.1;
       }
     });
 
@@ -765,9 +765,5 @@ export class AlienTerrainGenerator {
 
   public getEnemyBases(): THREE.Group[] {
     return this.enemyBases;
-  }
-
-  public getAlienStructures(): THREE.Group[] {
-    return this.alienStructures;
   }
 }
